@@ -18,25 +18,30 @@ async function fetchJson(url) {
 }
 
 async function resolveChannelId({ apiKey, channel }) {
-  // channel can be: "@handle", "handle", or "UCxxxx"
   const raw = channel.trim();
-  const handle = raw.startsWith("@") ? raw.slice(1) : raw;
+  const handleWithAt = raw.startsWith("@") ? raw : `@${raw}`;
+  const handleNoAt = raw.startsWith("@") ? raw.slice(1) : raw;
 
-  // If UC... treat as channelId
   if (raw.startsWith("UC") && raw.length > 10) return raw;
 
-  // 1) Try channels.list with forHandle (works for many handles)
-  {
-    const url = `https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=${encodeURIComponent(handle)}&key=${encodeURIComponent(apiKey)}`;
+  // 1) forHandle은 @ 포함/미포함 둘 다 시도
+  for (const h of [handleNoAt, handleWithAt]) {
+    const url = `https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=${encodeURIComponent(h)}&key=${encodeURIComponent(apiKey)}`;
     const r = await fetchJson(url);
     const id = r?.data?.items?.[0]?.id;
     if (r.ok && id) return id;
   }
 
-  // 2) Fallback: search.list -> channelId
-  {
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&maxResults=1&q=${encodeURIComponent(handle)}&key=${encodeURIComponent(apiKey)}`;
+  // 2) search.list에서 q에 @handle도 같이 시도
+  for (const q of [handleWithAt, handleNoAt]) {
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&maxResults=1&q=${encodeURIComponent(q)}&key=${encodeURIComponent(apiKey)}`;
     const r = await fetchJson(url);
+
+    // 검색 자체가 막히면(쿼터/키 제한/비활성화) 여기서 확인 가능
+    if (!r.ok && r?.data?.error?.message) {
+      throw new Error(`YouTube search error: ${r.data.error.message}`);
+    }
+
     const id = r?.data?.items?.[0]?.snippet?.channelId;
     if (r.ok && id) return id;
   }
