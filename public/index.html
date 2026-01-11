@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- referrer가 확실히 나가게(키 referrer 제한을 쓸 거라서) -->
+  <meta name="referrer" content="origin" />
+  <title>YouTube Subscribers Widget</title>
+  <style>
+    :root { --size: 220px; --stroke: 16; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
+      background: transparent; padding: 20px;
+    }
+    .card {
+      width: min(380px, 92vw);
+      padding: 18px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.78);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+    .title { font-size: 14px; opacity: 0.75; margin-bottom: 10px; }
+    .wrap { display: grid; place-items: center; }
+    .ring { width: var(--size); height: var(--size); position: relative; }
+    .center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+    .count { font-size: 30px; font-weight: 700; line-height: 1.05; }
+    .sub { font-size: 13px; opacity: 0.7; margin-top: 6px; }
+    .pct { font-size: 13px; opacity: 0.85; margin-top: 10px; }
+    .err { font-size: 12px; color: #b00020; margin-top: 10px; white-space: pre-wrap; }
+
+    .cfg { display: grid; gap: 10px; }
+    label { font-size: 12px; opacity: .8; }
+    input {
+      width: 100%; box-sizing: border-box;
+      padding: 10px 12px; border-radius: 12px;
+      border: 1px solid rgba(0,0,0,0.12);
+      background: rgba(255,255,255,0.9);
+      font-size: 14px;
+    }
+    button {
+      padding: 10px 12px; border-radius: 12px;
+      border: none; cursor: pointer;
+      background: rgba(0,0,0,0.85);
+      color: white; font-size: 14px;
+    }
+    .ghost {
+      background: rgba(0,0,0,0.06);
+      color: rgba(0,0,0,0.85);
+    }
+    .small { font-size: 12px; opacity: .75; line-height: 1.45; }
+    .row { display: grid; gap: 6px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; font-size: 12px; }
+    .hr { height: 1px; background: rgba(0,0,0,0.08); margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="title" id="title">YouTube 구독자</div>
+
+    <!-- 설정 화면 -->
+    <div id="config" style="display:none">
+      <div class="cfg">
+        <div class="row">
+          <label>1) YouTube API Key (본인 것)</label>
+          <input id="apiKeyInput" placeholder="AIza... 로 시작하는 키" />
+          <div class="small">
+            🔒 추천: 키 제한에서 <b>HTTP referrers</b>를 <span class="mono" id="refHint"></span> 로 제한하면<br/>
+            이 키는 그 도메인에서만 작동해서 남이 훔쳐도 못 씁니다.
+          </div>
+        </div>
+
+        <div class="row">
+          <label>2) 내 채널 입력 (@핸들 / 채널 URL / 채널ID)</label>
+          <input id="channelInput" placeholder="예: @yourhandle 또는 https://youtube.com/@yourhandle 또는 UCxxxx" />
+        </div>
+
+        <div class="row">
+          <label>3) 목표 구독자 수</label>
+          <input id="goalInput" type="number" min="1" placeholder="예: 10000" />
+        </div>
+
+        <div class="row">
+          <label>표시 제목(옵션)</label>
+          <input id="labelInput" placeholder="예: 구독자 진행률" />
+        </div>
+
+        <div class="row">
+          <label>갱신 주기(초)</label>
+          <input id="refreshInput" type="number" min="10" placeholder="기본 60" />
+        </div>
+
+        <button id="saveBtn">저장하고 위젯 보기</button>
+        <button id="makeEmbedBtn" class="ghost">노션 임베드 링크 만들기</button>
+
+        <div class="hr"></div>
+
+        <div class="row">
+          <label>임베드 링크 (노션 /embed에 붙여넣기)</label>
+          <input id="embedLink" class="mono" readonly />
+          <button id="copyBtn" style="display:none">링크 복사</button>
+        </div>
+
+        <div class="small">
+          ※ 키는 URL에 포함되지 않고, 이 브라우저에만 저장됩니다.<br/>
+          (다른 기기/브라우저에서는 한 번 더 입력해야 해요.)
+        </div>
+      </div>
+    </div>
+
+    <!-- 위젯 화면 -->
+    <div id="widget" style="display:none">
+      <div class="wrap">
+        <div class="ring">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="16" />
+            <circle id="prog" cx="50" cy="50" r="42"
+                    fill="none" stroke="rgba(0,0,0,0.75)" stroke-width="16" stroke-linecap="round"
+                    transform="rotate(-90 50 50)"
+                    stroke-dasharray="263.89" stroke-dashoffset="263.89" />
+          </svg>
+
+          <div class="center">
+            <div>
+              <div class="count" id="count">—</div>
+              <div class="sub" id="sub">목표 —</div>
+              <div class="pct" id="pct">—%</div>
+              <div class="err" id="err"></div>
+              <div style="margin-top:10px;">
+                <button id="settingsBtn" class="ghost" style="font-size:12px; padding:8px 10px;">설정</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  const qs = new URLSearchParams(location.search);
+
+  // 저장 키(브라우저에만 저장)
+  const LS_KEY = "ytWidget.userApiKey";
+
+  function parseChannel(inputRaw) {
+    if (!inputRaw) return { channelId: null, handle: null };
+    const input = inputRaw.trim();
+
+    if (input.startsWith("UC") && input.length >= 10) return { channelId: input, handle: null };
+    if (input.startsWith("@")) return { channelId: null, handle: input };
+
+    try {
+      if (input.includes("youtube.com")) {
+        const u = new URL(input);
+        const m1 = u.pathname.match(/\/channel\/(UC[\w-]+)/);
+        if (m1) return { channelId: m1[1], handle: null };
+        const m2 = u.pathname.match(/\/@([\w.\-]+)/);
+        if (m2) return { channelId: null, handle: "@" + m2[1] };
+      }
+    } catch (_) {}
+
+    return { channelId: null, handle: "@" + input.replace(/^@/, "") };
+  }
+
+  function format(n) { return (n == null) ? "—" : Number(n).toLocaleString("ko-KR"); }
+
+  // UI 기본값
+  const label = qs.get("label") || "YouTube 구독자";
+  const goal = Number(qs.get("goal") || 0);
+  const refreshSec = Number(qs.get("refresh") || 60);
+  const channelParam = qs.get("channel") || "";
+  const parsed = parseChannel(channelParam);
+  const channelId = qs.get("channelId") || parsed.channelId;
+  const handle = qs.get("handle") || parsed.handle;
+
+  document.getElementById("title").textContent = label;
+
+  // referrer 제한 힌트
+  document.getElementById("refHint").textContent = `${location.origin}/*`;
+
+  // 설정 버튼
+  document.getElementById("settingsBtn").onclick = () => {
+    location.href = location.origin + location.pathname; // 파라미터 제거하여 설정 화면
+  };
+
+  // API Key 로드
+  const savedKey = localStorage.getItem(LS_KEY) || "";
+
+  // 모드 결정: 파라미터로 채널/목표가 없으면 설정, 있으면 위젯(단 키 없으면 설정으로)
+  const hasTarget = !!(channelId || handle) && goal > 0;
+  const hasKey = !!savedKey;
+
+  if (!hasTarget || !hasKey) {
+    // 설정 화면
+    document.getElementById("config").style.display = "block";
+    document.getElementById("widget").style.display = "none";
+
+    const apiKeyInput = document.getElementById("apiKeyInput");
+    const channelInput = document.getElementById("channelInput");
+    const goalInput = document.getElementById("goalInput");
+    const labelInput = document.getElementById("labelInput");
+    const refreshInput = document.getElementById("refreshInput");
+    const embedLink = document.getElementById("embedLink");
+    const copyBtn = document.getElementById("copyBtn");
+
+    apiKeyInput.value = savedKey;
+    channelInput.value = channelParam || "";
+    goalInput.value = goal || "";
+    labelInput.value = (qs.get("label") || "");
+    refreshInput.value = (qs.get("refresh") || "");
+
+    function buildEmbedUrl() {
+      const ch = channelInput.value.trim();
+      const g = Number(goalInput.value || 0);
+      const l = labelInput.value.trim();
+      const r = Number(refreshInput.value || 60);
+
+      if (!ch) throw new Error("채널을 입력해줘!");
+      if (!g || g <= 0) throw new Error("목표 구독자 수를 입력해줘!");
+      const k = apiKeyInput.value.trim();
+      if (!k) throw new Error("API Key를 입력해줘!");
+
+      // 키는 URL에 절대 넣지 않음!
+      const url = new URL(location.origin + location.pathname);
+      url.searchParams.set("channel", ch);
+      url.searchParams.set("goal", String(g));
+      if (l) url.searchParams.set("label", l);
+      if (r && r !== 60) url.searchParams.set("refresh", String(r));
+      return url.toString();
+    }
+
+    document.getElementById("saveBtn").onclick = () => {
+      const k = apiKeyInput.value.trim();
+      if (!k) return alert("API Key를 입력해줘!");
+      localStorage.setItem(LS_KEY, k);
+
+      try {
+        const url = buildEmbedUrl();
+        // 위젯 화면으로 이동
+        location.href = url;
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    document.getElementById("makeEmbedBtn").onclick = () => {
+      try {
+        const url = buildEmbedUrl();
+        embedLink.value = url;
+        copyBtn.style.display = "block";
+      } catch (e) {
+        alert(e.message || String(e));
+      }
+    };
+
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(embedLink.value);
+        copyBtn.textContent = "복사됨!";
+        setTimeout(() => (copyBtn.textContent = "링크 복사"), 1200);
+      } catch (e) {
+        alert("복사 실패: 브라우저 권한을 확인해줘");
+      }
+    };
+
+    // 설정 화면에서 끝
+    return;
+  }
+
+  // 위젯 화면
+  document.getElementById("config").style.display = "none";
+  document.getElementById("widget").style.display = "block";
+
+  const apiKey = savedKey;
+
+  const CIRC = 2 * Math.PI * 42;
+  const prog = document.getElementById("prog");
+  prog.setAttribute("stroke-dasharray", CIRC.toFixed(2));
+
+  function setProgress(p) {
+    const clamped = Math.max(0, Math.min(1, p));
+    const offset = CIRC * (1 - clamped);
+    prog.setAttribute("stroke-dashoffset", offset.toFixed(2));
+  }
+
+  async function fetchSubscriberCount() {
+    const base = new URL("https://www.googleapis.com/youtube/v3/channels");
+    base.searchParams.set("part", "statistics");
+    if (channelId) base.searchParams.set("id", channelId);
+    else base.searchParams.set("forHandle", handle);
+    base.searchParams.set("key", apiKey);
+
+    const r = await fetch(base.toString());
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error?.message || "YouTube API error");
+
+    const item = data.items?.[0];
+    const stats = item?.statistics;
+    return stats?.subscriberCount != null ? Number(stats.subscriberCount) : null;
+  }
+
+  async function tick() {
+    const errEl = document.getElementById("err");
+    errEl.textContent = "";
+
+    try {
+      const subs = await fetchSubscriberCount();
+      document.getElementById("count").textContent = format(subs);
+      document.getElementById("sub").textContent = `목표 ${format(goal)}`;
+
+      if (subs == null) {
+        errEl.textContent = "구독자 수가 숨김 처리된 채널일 수 있어요.";
+        setProgress(0);
+        document.getElementById("pct").textContent = "—%";
+        return;
+      }
+
+      const p = subs / goal;
+      setProgress(p);
+      document.getElementById("pct").textContent = (p * 100).toFixed(1) + "%";
+    } catch (e) {
+      errEl.textContent = "오류: " + (e?.message || String(e)) +
+        "\n(설정에서 API Key / 채널 입력 / 키 제한(referrer) 확인)";
+    }
+  }
+
+  tick();
+  setInterval(tick, Math.max(10, refreshSec) * 1000);
+</script>
+</body>
+</html>
