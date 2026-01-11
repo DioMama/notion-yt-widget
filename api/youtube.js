@@ -62,7 +62,7 @@ module.exports = async (req, res) => {
 
   try {
     const channelId = await resolveChannelId({ apiKey, channel });
-    if (!channelId) return json(res, 404, { ok: false, error: "Could not resolve channelId from channel/handle." }, cacheSeconds);
+    if (!channelId) return json(res, 404, { ok: false, error: "채널을 찾지 못했어요. @핸들 철자/대소문자 확인하거나 채널ID(UC...)로 넣어주세요." }, cacheSeconds);
 
     const statsUrl = `https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${encodeURIComponent(channelId)}&key=${encodeURIComponent(apiKey)}`;
     const r = await fetchJson(statsUrl);
