@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>YouTube Widget</title>
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;}
+    .wrap{width:100%;max-width:520px;padding:12px;box-sizing:border-box;}
+    .card{border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:14px;}
+    .label{font-size:14px;opacity:.7;margin-bottom:6px;}
+    .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;}
+    .big{font-size:22px;font-weight:800;}
+    .small{font-size:14px;opacity:.7;}
+    .bar{margin-top:10px;height:10px;border-radius:999px;background:rgba(0,0,0,.08);overflow:hidden;}
+    .bar > div{height:100%;width:0%;background:rgba(0,0,0,.55);border-radius:999px;transition:width .4s ease;}
+    .err{margin-top:10px;font-size:12px;color:#d00;display:none;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="label" id="label">구독자 달성률</div>
+      <div class="row">
+        <div class="big" id="subs">불러오는 중…</div>
+        <div class="small" id="goal">목표 -</div>
+      </div>
+      <div class="bar"><div id="bar"></div></div>
+      <div class="err" id="err"></div>
+    </div>
+  </div>
+
+<script>
+  const qs = new URLSearchParams(location.search);
+  const channel = qs.get("channel") || "UCAjeAuHbqjpFH4u4KHgSN6g";
+  const goal = Number(qs.get("goal") || "1000");
+  const label = qs.get("label") || "구독자 달성률";
+  const refresh = qs.get("refresh") || "21600";
+
+  const $label = document.getElementById("label");
+  const $subs = document.getElementById("subs");
+  const $goal = document.getElementById("goal");
+  const $bar = document.getElementById("bar");
+  const $err = document.getElementById("err");
+
+  $label.textContent = label;
+
+  function showError(msg){
+    $err.style.display = "block";
+    $err.textContent = msg;
+  }
+
+  async function load(){
+    try{
+      const url = `/api/youtube?channel=${encodeURIComponent(channel)}&refresh=${encodeURIComponent(refresh)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if(!data.ok){
+        showError(data.error || "불러오기 실패");
+        $subs.textContent = "—";
+        return;
+      }
+      const sub = Number(data.subscriberCount || 0);
+      const ratio = goal > 0 ? Math.max(0, Math.min(100, (sub / goal) * 100)) : 0;
+
+      $subs.textContent = `${sub.toLocaleString("ko-KR")}명`;
+      $goal.textContent = `목표 ${goal.toLocaleString("ko-KR")} (${ratio.toFixed(1)}%)`;
+      $bar.style.width = `${ratio}%`;
+    }catch(e){
+      showError(e.message || "오류");
+      $subs.textContent = "—";
+    }
+  }
+  load();
+</script>
+</body>
+</html>
