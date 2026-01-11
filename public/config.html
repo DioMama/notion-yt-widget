@@ -57,7 +57,7 @@
   const out = document.getElementById("out");
 
   function makeUrl(){
-    const u = new URL(location.origin + "/widget");
+    const u = new URL(location.origin + "/widget.html");
     u.searchParams.set("channel", inChannel.value.trim());
     u.searchParams.set("goal", String(Number(inGoal.value || "1000")));
     u.searchParams.set("label", inLabel.value.trim() || "구독자 달성률");
